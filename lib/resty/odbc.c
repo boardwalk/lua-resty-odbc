@@ -40,21 +40,59 @@ static void lua_sql_error(lua_State* L, SQLSMALLINT handle_type, SQLHANDLE handl
 // push a value from a result set onto the lua stack
 static void lua_sql_pushresult(lua_State* L, SQLHSTMT hstmt, SQLSMALLINT col)
 {
-  SQLLEN col_type;
+  // we have old header here that defines SQLLEN as a 4 byte integer,
+  // which is wrong and smashes the stack here
+  /*SQLLEN*/long col_type;
   SQLColAttribute(hstmt, col, SQL_DESC_CONCISE_TYPE, NULL, 0, NULL, &col_type);
 
+  col_type = labs(col_type); // TODO Why do we need this?
+
+  if(col_type == SQL_CHAR ||
+      col_type == SQL_VARCHAR){
+    SQLCHAR val[256];
+    SQLGetData(hstmt, col, SQL_C_CHAR, val, sizeof(val), NULL);
+    lua_pushstring(L, (char*)val);
+  }
   if(col_type == SQL_INTEGER) {
     SQLINTEGER val;
     SQLGetData(hstmt, col, SQL_C_SLONG, &val, 0, NULL);
     lua_pushinteger(L, val);
   }
-  else if(col_type == SQL_VARCHAR){
-    SQLCHAR val[256];
-    SQLGetData(hstmt, col, SQL_C_CHAR, val, sizeof(val), NULL);
-    lua_pushstring(L, (char*)val);
+  else if(col_type == SQL_SMALLINT) {
+    SQLSMALLINT val;
+    SQLGetData(hstmt, col, SQL_C_SSHORT, &val, 0, NULL);
+    lua_pushinteger(L, val);
+  }
+  else if(col_type == SQL_FLOAT ||
+      col_type == SQL_REAL ||
+      col_type == SQL_DOUBLE) {
+    SQLDOUBLE val;
+    SQLGetData(hstmt, col, SQL_C_DOUBLE, &val, 0, NULL);
+    lua_pushnumber(L, val);
+  }
+  else if(col_type == SQL_TYPE_DATE) {
+    DATE_STRUCT val;
+    SQLGetData(hstmt, col, SQL_C_TYPE_DATE, &val, 0, NULL);
+    char date[16];
+    sprintf(date, "%04d-%02d-%02d", val.year, val.month, val.day);
+    lua_pushstring(L, date);
+  }
+  else if(col_type == SQL_TYPE_TIME) {
+    TIME_STRUCT val;
+    SQLGetData(hstmt, col, SQL_C_TYPE_TIME, &val, 0, NULL);
+    char time[16];
+    sprintf(time, "%02d:%02d:%02d", val.hour, val.minute, val.second);
+    lua_pushstring(L, time);
+  }
+  else if(col_type == SQL_TYPE_TIMESTAMP) {
+    TIMESTAMP_STRUCT val;
+    SQLGetData(hstmt, col, SQL_C_TIMESTAMP, &val, 0, NULL);
+    char timestamp[32];
+    sprintf(timestamp, "%04d-%02d-%02d %02d:%02d:%02d", val.year, val.month, val.day,
+        val.hour, val.minute, val.second);
+    lua_pushstring(L, timestamp);
   }
   else {
-    // TODO implement more data types
     fprintf(stderr, "unknown data type %ld\n", col_type);
     lua_pushnil(L);
   }
