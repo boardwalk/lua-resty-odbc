@@ -1,2 +1,2 @@
 #!/bin/sh
-gcc -o lib/resty/odbc.so -shared -fPIC -Wall -pedantic -std=c11 lib/resty/odbc.c -lodbc
+gcc -o lib/resty/odbc.so -shared -fPIC -Wall -pedantic -std=c99 -g lib/resty/odbc.c -lodbc
